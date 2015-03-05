@@ -1,0 +1,63 @@
+###################################################
+### Begin compiler-specific portion of Makefile ###
+###################################################
+
+# Programs to use for creating dependencies, compiling source files, and creating the library file, respectively
+DEP = sdcc
+CC  = sdcc
+
+# Flags for above programs when calling them from the command line
+DFLAGS = -MM $(INCDIRS) $<
+CFLAGS = --model-large --std-c99 $(INCDIRS) -c $< -o "$(OBJDIR)/"
+
+# File extensions for dependency files, source files, object files, and library files, respectively
+DEPEXT = d
+SRCEXT = c
+OBJEXT = rel
+
+#################################################
+### End compiler-specific portion of Makefile ###
+#################################################
+
+
+NAME := $(shell $(PWD) | $(SED) -e 's_/.*/__' | $(SED) -e 's_\S.*\\__')
+INCDIRS = -I../../include $(foreach dir,$(strip $(EXTERNINCDIRS)),-I../$(dir))
+LCLSRCDIR = src
+
+TARGETDIR = $(TARGETRELTOSUBSRCREL)
+
+OBJDIR = $(TARGETDIR)/$(TARGETOBJDIRREL)/$(NAME)
+DEPDIR = $(TARGETDIR)/$(TARGETDEPDIRREL)/$(NAME)
+LIBDIR = $(TARGETDIR)/$(TARGETLIBDIRREL)
+
+SRCFILES := $(shell $(LS) $(LCLSRCDIR)/*.$(SRCEXT))
+OBJFILES = $(subst .$(SRCEXT),.$(OBJEXT),$(subst $(LCLSRCDIR),$(OBJDIR),$(SRCFILES)))
+DEPFILES = $(subst .$(SRCEXT),.$(DEPEXT),$(subst $(LCLSRCDIR),$(DEPDIR),$(SRCFILES)))
+
+-include $(DEPFILES)
+
+all: build
+
+build: $(OBJFILES)
+	$(if $(FILESMODIFIED),$(ECHO)) 
+
+$(OBJDIR)/%.$(OBJEXT) : $(LCLSRCDIR)/%.$(SRCEXT) $(DEPDIR)/%.$(DEPEXT)
+	$(ECHO)
+	$(ECHO) "Building object file '$@'"
+	[ -d $(OBJDIR) ] || $(MKDIR) $(OBJDIR) > $(BLACKHOLE)
+	$(CC) $(CFLAGS)
+	$(ECHO) "Finished building object file '$@'"
+	$(eval FILESMODIFIED = 1)
+
+$(DEPDIR)/%.$(DEPEXT): $(LCLSRCDIR)/%.$(SRCEXT)
+	$(ECHO)
+	$(ECHO) "Building dependency file '$@'"
+	[ -d $(DEPDIR) ] || $(MKDIR) $(DEPDIR) > $(BLACKHOLE)
+	$(ECHO) "$(OBJDIR)/" | $(TR) -d '\n' | $(TR) -d '\r' > $@.tmp
+	$(DEP) $(DFLAGS) >> $@.tmp
+	$(SED) 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.tmp > $@
+	$(RM) -f $@.tmp
+	$(ECHO) "Finished building dependency file '$@'"
+	$(eval FILESMODIFIED = 1)
+
+.SECONDARY: $(OBJFILES) $(DEPFILES)
