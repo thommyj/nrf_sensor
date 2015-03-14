@@ -110,9 +110,9 @@ void main()
  */
 void powerdown(void)
 {
-	rtc2_run();
-	pwr_clk_mgmt_enter_pwr_mode_memory_ret_tmr_on();
 	while(1){
+		rtc2_run();
+		pwr_clk_mgmt_enter_pwr_mode_memory_ret_tmr_on();
 		printf("waiting for sleep\r\n");
 	}
 }
