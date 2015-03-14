@@ -241,6 +241,8 @@ int send_pkt(struct status_packet *pkt)
 	}
 	rf_irq_clear_all(); //clear all interrupts in the 24L01
 
+	rf_power_down();
+
 	return pkt_sent;
 }
 
