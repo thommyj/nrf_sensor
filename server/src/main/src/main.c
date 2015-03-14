@@ -99,6 +99,7 @@ void setup_hw()
 	rf_configure(RF_CONFIG_MASK_TX_DS |
 			RF_CONFIG_MASK_MAX_RT |
 			RF_CONFIG_EN_CRC |
+			RF_CONFIG_CRCO |
 			RF_CONFIG_PWR_UP |
 			RF_CONFIG_PRIM_RX,
 		true,			/* take rx to active */
