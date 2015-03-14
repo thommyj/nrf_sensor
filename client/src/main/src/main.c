@@ -8,8 +8,10 @@
 #include <interrupt.h>
 #include <rtc2.h>
 #include <delay.h>
+#include <rf.h>
 
 #include "reg24le1.h"
+#include "sensor.h"
 
 #define RTC_FIRE_TIME		(2)
 #define WAKEUP_TIME		(120)
@@ -20,10 +22,13 @@ void setup_hw(void);
 uint8_t check_state(uint8_t powerdown_reason);
 uint8_t is_wakeuptime(void);
 void powerdown(void);
+void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas);
+int send_pkt(struct status_packet *pkt);
 
 struct state_t{
 	uint16_t wakeups;
 	uint16_t magic;
+	uint16_t sent_pkts;
 };
 
 /* 
@@ -31,8 +36,11 @@ struct state_t{
  * sdcc will not allocate space for variables with __at attribute,
  * put this variable in the end and hope for the best
  */
-__xdata __at(0x1F0) struct state_t state;
+__xdata __at(0x1E0) struct state_t state;
 
+struct status_packet packet;
+
+//TODO:remove, we measure the power supply with VDC anyway
 interrupt_isr_pwr_fail()
 {
 	int i;
@@ -55,7 +63,7 @@ interrupt_isr_rtc2()
 
 void main()
 {
-	int i;
+	uint8_t vdc;
 	uint8_t rr = pwr_clk_mgmt_get_reset_reason();
 	uint8_t pr = PWRDWN; //TODO: doesn't seem to exist getters for PWRDWN? add
 
@@ -81,8 +89,14 @@ void main()
 
 	sti();
 
-	printf("VDC measure: %d\r\n",
-		adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD));
+	vdc = adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD);
+
+	printf("VDC measure: %d\r\n", vdc);	
+	
+	prepare_pkt(&packet, vdc);
+	if(send_pkt(&packet)){
+		state.sent_pkts++;
+	}
 
 	powerdown();
 }
@@ -168,6 +182,65 @@ void setup_hw()
 						PWR_CLK_MGMT_PWR_FAILURE_CONFIG_OPTION_POF_ENABLE);
 	interrupt_control_pwr_fail_enable();
 }
+
+void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
+{
+	pkt->magic       = STATUS_PACKET_MAGIC;
+	pkt->sequence_nr = state.sent_pkts; 
+	pkt->wakeups     = state.wakeups;
+	pkt->vdc         = vdc_meas;
+	pkt->version     = STATUS_PACKET_HDR_VER;
+        //TODO: define and fill in status
+	pkt->status[0]   = 1;
+        pkt->status[1]   = 2;
+        pkt->status[2]   = 4;
+        pkt->status[3]   = 8;
+}
+
+int send_pkt(struct status_packet *pkt)
+{
+	uint8_t pkt_sent = 0;
+	uint8_t status;
+	
+	//TODO: calculate reasonable ARD
+	//TODO: gain control?
+	rf_configure(RF_CONFIG_MASK_RX_DR |
+			RF_CONFIG_EN_CRC |
+			RF_CONFIG_CRCO |
+                        RF_CONFIG_PWR_UP,
+                false,                   /* take rx to active */
+                RF_EN_AA_ENAA_P0,       /* enable enhanced shochburst channel 0 */
+                RF_EN_RXADDR_ERX_P0,    /* enable channel 0 */
+                RF_SETUP_AW_5BYTES,     /* use 5byte address */
+                RF_SETUP_RETR_ARD_4000 | RF_SETUP_RETR_ARC_15,
+                RF_RF_CH_DEFAULT_VAL,   /* use default channel */
+                RF_RF_SETUP_RF_DR_1_MBPS | RF_RF_SETUP_RF_PWR_0_DBM,
+                server_address,
+                NULL, 0, 0, 0, 0,       /* not interested in other channel addresses*/
+                client0_address,
+                sizeof(struct status_packet),  /* size of expected packet */
+                0,0,0,0,0,
+                RF_DYNPD_DPL_NONE,      /* no dynamic payload size */
+                0);
+
+	rf_write_tx_payload((const uint8_t*)pkt, sizeof(struct status_packet), true); //transmit received char over RF
+
+	//wait until the packet has been sent or the maximum number of retries has been reached
+	//TODO: timeout?
+	while(!rf_irq_pin_active()){
+		/*NOP*/
+	}
+
+	status = rf_get_status();
+	printf("send_packet: irq active, status 0x%02X\r\n", status);
+	if(rf_is_tx_ds_active_in_status_val(status)){
+		pkt_sent = 1;
+	}
+	rf_irq_clear_all(); //clear all interrupts in the 24L01
+
+	return pkt_sent;
+}
+
 
 void putchar(char c)
 {
