@@ -28,7 +28,7 @@ TAIL = tail
 LK = sdcc
 
 # Flags for above program when calling it from the command line
-LFLAGS = --model-large --code-loc 0x0000 --code-size 0x4000 --xram-loc 0x0000 --xram-size 0x400 -o $(MAINIHX) $(LIBDIRS) $(LIBFILES) $(OBJFILES)
+LFLAGS = --model-large --code-loc 0x0000 --code-size 0x4000 --xram-loc 0x0080 --xram-size 0x380 -o $(MAINIHX) $(LIBDIRS) $(LIBFILES) $(OBJFILES)
 
 ################################################
 ### End library-specific portion of Makefile ###

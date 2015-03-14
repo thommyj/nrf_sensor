@@ -29,14 +29,15 @@ struct state_t{
 	uint16_t wakeups;
 	uint16_t magic;
 	uint16_t sent_pkts;
+	uint16_t no_answer;
 };
 
 /* 
  * xdata between 0x0-0x1FF will be kept during sleep
  * sdcc will not allocate space for variables with __at attribute,
- * put this variable in the end and hope for the best
+ * so makefile needs to set start of xram after this variable
  */
-__xdata __at(0x1E0) struct state_t state;
+__xdata __at(0x0) struct state_t state;
 
 struct status_packet packet;
 
