@@ -95,9 +95,10 @@ void main()
 	printf("VDC measure: %d\r\n", vdc);	
 	
 	prepare_pkt(&packet, vdc);
-	if(send_pkt(&packet)){
-		state.sent_pkts++;
+	if(!send_pkt(&packet)){
+		state.no_answer++;
 	}
+	state.sent_pkts++;
 
 	powerdown();
 }
@@ -189,6 +190,7 @@ void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
 	pkt->magic       = STATUS_PACKET_MAGIC;
 	pkt->sequence_nr = state.sent_pkts; 
 	pkt->wakeups     = state.wakeups;
+	pkt->timeouts    = state.no_answer;
 	pkt->vdc         = vdc_meas;
 	pkt->version     = STATUS_PACKET_HDR_VER;
         //TODO: define and fill in status

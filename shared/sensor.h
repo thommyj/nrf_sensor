@@ -11,6 +11,7 @@ struct status_packet{
         uint16_t magic;
 	uint16_t sequence_nr;
 	uint16_t wakeups;
+	uint16_t timeouts;
 	uint8_t  vdc;
 	uint8_t  version;
 	uint8_t  status[4];
