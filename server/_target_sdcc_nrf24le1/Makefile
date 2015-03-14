@@ -8,14 +8,14 @@ TARGETPACKAGE = _target_sdcc_nrf24le1_32
 
 # Add include directories (outside this folder) that the sub makes need to know about (separated by a space)
 # These MUST be the relative path from within this directory to the desired directory (no absolute paths)
-export EXTERNINCDIRS = ../../../lib_nrf24le1_sdk/include ../../../lib_nrf24le1_sdk/$(TARGETPACKAGE)/include/ 
+export EXTERNINCDIRS = ../../../lib_nrf24le1_sdk/include ../../../lib_nrf24le1_sdk/$(TARGETPACKAGE)/include/ ../../shared/
 export EXTERNLIBDIRS = ../../../lib_nrf24le1_sdk/$(TARGETPACKAGE)/lib 
 
 # Functions needed by this makefile and the one that builds the source packages (MakefileSrc)
 export ECHO = @echo
 export RM = rm
 export SED = sed
-export MKDIR = mkdir
+export MKDIR = mkdir -p
 export TR = tr
 export BLACKHOLE = /dev/null
 export PWD = pwd
