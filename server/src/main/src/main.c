@@ -40,15 +40,17 @@ void main()
 			uint8_t pkt_cnt = 0;
 			uint8_t status;
 			do{
-				printf("packet received (%d)!\n", ++pkt_cnt);
-				status = rf_read_rx_payload((uint8_t*)packet, sizeof(packet));
-			}while((status & RF_STATUS_RX_P_NO_RX_FIFO_EMPTY) != RF_STATUS_RX_P_NO_RX_FIFO_EMPTY);
+				rf_read_rx_payload((uint8_t*)packet, sizeof(packet));
+				printf("packet received (%d)!\r\n", ++pkt_cnt);
+				printf("   magic       0x%04X\r\n", packet.magic);
+				printf("   sequence nr 0x%04X\r\n", packet.sequence_nr);
+				printf("   wakeups     0x%04X\r\n", packet.wakeups);
+				printf("   timeouts    0x%04X\r\n", packet.timeouts);
+				printf("   vdc         0x%02X\r\n", packet.vdc);
+				printf("   status      0x%08X\r\n", *((uint32_t*)&(packet.status)));
+				printf("   version     0x%02x\r\n", packet.version);
+			}while((rf_get_status() & RF_STATUS_RX_P_NO_RX_FIFO_EMPTY) != RF_STATUS_RX_P_NO_RX_FIFO_EMPTY);
 			rf_irq_clear_all();		//TODO: possible race? level/edge?
-			printf("last packet received:\r\n");
-			printf("   magic       0x%04X\r\n", packet.magic);
-			printf("   sequence nr 0x%04X\r\n", packet.sequence_nr);
-			printf("   wakeups     0x%04X\r\n", packet.wakeups);
-			printf("   vdc         0x%04X\r\n", packet.vdc);
 		}
 
 		rf_status |= rf_get_status();
