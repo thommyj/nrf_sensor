@@ -144,11 +144,11 @@ uint16_t check_wakeuptime(void)
 				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
 				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_PULL_UP_RESISTOR);
 
-	//if P1.3 is high, use short time for debugging
+	//if P1.3 is high, use normal time for debugging
 	if(gpio_pin_val_read(GPIO_PIN_ID_P1_3)){
-		return WAKEUP_TIME_DEBUG/RTC_FIRE_TIME;
-	}else{
 		return WAKEUP_TIME/RTC_FIRE_TIME;
+	}else{
+		return WAKEUP_TIME_DEBUG/RTC_FIRE_TIME;
 	}
 }
 
