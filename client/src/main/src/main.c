@@ -196,11 +196,10 @@ void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
 	pkt->timeouts    = state.no_answer;
 	pkt->vdc         = vdc_meas;
 	pkt->version     = STATUS_PACKET_HDR_VER;
-        //TODO: define and fill in status
-	pkt->status[0]   = 1;
-        pkt->status[1]   = 2;
-        pkt->status[2]   = 4;
-        pkt->status[3]   = 8;
+	pkt->status[0]   = gpio_pin_val_read(GPIO_PIN_ID_P1_4);
+        pkt->status[1]   = P0; //TODO: move out port reads
+        pkt->status[2]   = P1;
+        pkt->status[3]   = 0;
 }
 
 int send_pkt(struct status_packet *pkt)
