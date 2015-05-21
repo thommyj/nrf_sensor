@@ -19,7 +19,7 @@
 #define STATE_MAGIC		(0xAA12)
 
 void setup_hw(void);
-uint8_t check_state(uint8_t powerdown_reason);
+uint8_t init_state(uint8_t powerdown_reason);
 uint8_t is_wakeuptime(void);
 void powerdown(void);
 void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas);
@@ -52,29 +52,28 @@ interrupt_isr_rtc2()
 void main()
 {
 	uint8_t vdc;
-	uint8_t rr = pwr_clk_mgmt_get_reset_reason();
 	uint8_t pr = PWRDWN; //TODO: doesn't seem to exist getters for PWRDWN? add
+	uint8_t state_ok;
 
-	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
-	RSTREAS = 0xFF;
-
-	//TODO: seperate hw setup. Not everything needs to be setup if we are about to sleep	
-	setup_hw();
-	
-	if(!check_state(pr)){
-		printf("\r\n\r\nWARNING: state reset. This is normal if this is powerup");
-	}else{
-		printf(".");
-	}
+	state_ok = init_state(pr);
 
 	if(!is_wakeuptime()){
 		powerdown();
 	}
 	
+	setup_hw();
+
+	if(!state_ok){
+		printf("\r\n\r\nWARNING: state reset. This is normal if this is powerup");
+	}
+
 	printf("\r\nRunning: " __FILE__ ", build:" __DATE__ "\r\n");
-	printf("reset reason: 0x%hhx\r\n", rr);
+	printf("reset reason: 0x%hhx\r\n", pwr_clk_mgmt_get_reset_reason());
 	printf("powerdown: 0x%hhx\r\n", pr);
 
+	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
+	RSTREAS = 0xFF;
+	
 	sti();
 
 	vdc = adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD);
@@ -97,6 +96,14 @@ void main()
  */
 void powerdown(void)
 {
+	//setup rtc2 here instead of in setup_hw, this avoids setting up hw each wakeup
+	pwr_clk_mgmt_clklf_configure(PWR_CLK_MGMT_CLKLF_CONFIG_OPTION_CLK_SRC_RCOSC32K);
+	rtc2_configure(RTC2_CONFIG_OPTION_DISABLE |
+			RTC2_CONFIG_OPTION_COMPARE_MODE_0_RESET_AT_IRQ |
+			RTC2_CONFIG_OPTION_DO_NOT_CAPTURE_ON_RFIRQ,
+			0xFFFF);
+	interrupt_control_rtc2_enable();
+	
 	while(1){
 		rtc2_run();
 		pwr_clk_mgmt_enter_pwr_mode_memory_ret_tmr_on();
@@ -112,7 +119,7 @@ void powerdown(void)
  * in the state is wrong
  * Returns 1 if state was ok, 0 if reset
  */
-uint8_t check_state(uint8_t powerdown)
+uint8_t init_state(uint8_t powerdown)
 {
 	uint8_t prev_pd_reason = powerdown & PWRDWN_PWR_CNTL_MASK;
 	uint8_t wakeup_from_tick = powerdown & PWRDWN_PWR_IS_WAKE_FROM_TICK;
@@ -152,13 +159,6 @@ uint8_t is_wakeuptime(void)
 
 void setup_hw()
 {
-	//setup rtc2
-	pwr_clk_mgmt_clklf_configure(PWR_CLK_MGMT_CLKLF_CONFIG_OPTION_CLK_SRC_RCOSC32K);
-	rtc2_configure(RTC2_CONFIG_OPTION_DISABLE |
-			RTC2_CONFIG_OPTION_COMPARE_MODE_0_RESET_AT_IRQ |
-			RTC2_CONFIG_OPTION_DO_NOT_CAPTURE_ON_RFIRQ,
-			0xFFFF);
-	interrupt_control_rtc2_enable();
 
 	//setup P1.4 as input pin
 	gpio_pin_configure(GPIO_PIN_ID_P1_4,
