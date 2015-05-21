@@ -14,8 +14,8 @@
 #include "sensor.h"
 
 #define RTC_FIRE_TIME		(2)
-#define WAKEUP_TIME		(120)
-#define WAKEUPS_BEFORE_RUN 	(WAKEUP_TIME/RTC_FIRE_TIME)
+#define WAKEUP_TIME_DEBUG	(10)
+#define WAKEUP_TIME		(30*60)
 #define STATE_MAGIC		(0xAA12)
 
 void setup_hw(void);
@@ -30,6 +30,7 @@ struct state_t{
 	uint16_t magic;
 	uint16_t sent_pkts;
 	uint16_t no_answer;
+	uint16_t wakeups_before_run;
 };
 
 /* 
@@ -138,13 +139,29 @@ uint8_t check_state(uint8_t powerdown)
 	}else{
 		memset(&state, 0x0, sizeof(state));
 		state.magic = STATE_MAGIC;
+		state.wakeups_before_run = check_wakeuptime();
 		return 0;
+	}
+}
+
+uint16_t check_wakeuptime(void)
+{
+	//setup P1.3 as input pin
+	gpio_pin_configure(GPIO_PIN_ID_P1_3,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_PULL_UP_RESISTOR);
+
+	//if P1.3 is high, use short time for debugging
+	if(gpio_pin_val_read(GPIO_PIN_ID_P1_3)){
+		return WAKEUP_TIME_DEBUG/RTC_FIRE_TIME;
+	}else{
+		return WAKEUP_TIME/RTC_FIRE_TIME;
 	}
 }
 
 uint8_t is_wakeuptime(void)
 {
-	return (state.wakeups % WAKEUPS_BEFORE_RUN)==0;
+	return (state.wakeups % state.wakeups_before_run)==0;
 }
 
 void setup_hw()
@@ -156,6 +173,11 @@ void setup_hw()
 			RTC2_CONFIG_OPTION_DO_NOT_CAPTURE_ON_RFIRQ,
 			0xFFFF);
 	interrupt_control_rtc2_enable();
+
+	//setup P1.4 as input pin
+	gpio_pin_configure(GPIO_PIN_ID_P1_4,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_PULL_DOWN_RESISTOR);
         
 	//Setup UART pins
         gpio_pin_configure(GPIO_PIN_ID_FUNC_RXD,
