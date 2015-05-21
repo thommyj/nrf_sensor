@@ -42,20 +42,6 @@ __xdata __at(0x0) struct state_t state;
 
 struct status_packet packet;
 
-//TODO:remove, we measure the power supply with VDC anyway
-interrupt_isr_pwr_fail()
-{
-	int i;
-	printf("power fail");
-	for(i=0;i<10;i++){
-		printf(", %d", adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD));
-	}
-	for(;;){
-		/*NOP*/
-	}
-
-}
-
 /*
  * dont really do anything when rtc2 fire, just use as wakeup source*/
 interrupt_isr_rtc2()
@@ -200,11 +186,6 @@ void setup_hw()
 			ADC_CONFIG_OPTION_SAMPLING_MODE_SINGLE_ENDED |
 			ADC_CONFIG_OPTION_ACQ_TIME_3_US |
 			ADC_CONFIG_OPTION_RESULT_JUSTIFICATION_RIGHT);
-
-	//setup early brown out detection
-	pwr_clk_mgmt_pwr_failure_configure(PWR_CLK_MGMT_PWR_FAILURE_CONFIG_OPTION_POF_THRESHOLD_2_7V |
-						PWR_CLK_MGMT_PWR_FAILURE_CONFIG_OPTION_POF_ENABLE);
-	interrupt_control_pwr_fail_enable();
 }
 
 void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
