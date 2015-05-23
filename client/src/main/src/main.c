@@ -24,7 +24,7 @@ void setup_hw(void);
 bool init_state(uint8_t powerdown_reason);
 bool is_sendpkttime(void);
 void powerdown(void);
-void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas);
+void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas, bool trap_active);
 bool send_pkt(struct status_packet *pkt);
 bool is_p14_active(void);
 
@@ -75,10 +75,10 @@ void main()
 		printf("\r\n\r\nWARNING: state reset. This is normal if this is powerup");
 	}
 
-	printf("\r\nRunning: " __FILE__ ", build:" __DATE__ "\r\n");
-	printf("reset reason: 0x%hhx\r\n", pwr_clk_mgmt_get_reset_reason());
-	printf("powerdown: 0x%hhx\r\n", pr);
-	printf("trap_active %d\r\n", trap_active);
+	printf("\r\nRunning: " __FILE__ ", " __DATE__ "\r\n");
+	printf("reset: 0x%hhx, pd 0x%hhd\r\n", pwr_clk_mgmt_get_reset_reason(), pr);
+	printf("trap %d (%d)\r\n", trap_active, state.saved_trap_active);
+	printf("wakeups %d, pkts %d (%d)\r\n", state.wakeups, state.sent_pkts, state.no_answer);	
 
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
 	RSTREAS = 0xFF;
@@ -89,7 +89,7 @@ void main()
 
 	printf("VDC measure: %d\r\n", vdc);	
 	
-	prepare_pkt(&packet, vdc);
+	prepare_pkt(&packet, vdc, trap_active);
 	if(!send_pkt(&packet)){
 		printf("WARNING: no answer when sending packet\r\n");
 		state.no_answer++;
@@ -218,7 +218,7 @@ void setup_hw()
 			ADC_CONFIG_OPTION_RESULT_JUSTIFICATION_RIGHT);
 }
 
-void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
+void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas, bool trap_active)
 {
 	pkt->magic       = STATUS_PACKET_MAGIC;
 	pkt->sequence_nr = state.sent_pkts; 
@@ -226,7 +226,7 @@ void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
 	pkt->timeouts    = state.no_answer;
 	pkt->vdc         = vdc_meas;
 	pkt->version     = STATUS_PACKET_HDR_VER;
-	pkt->status[0]   = is_p14_active();
+	pkt->status[0]   = trap_active;
         pkt->status[1]   = P0; //TODO: move out port reads
         pkt->status[2]   = P1;
         pkt->status[3]   = 0;
@@ -267,7 +267,6 @@ bool send_pkt(struct status_packet *pkt)
 	}
 
 	status = rf_get_status();
-	printf("send_packet: irq active, status 0x%02X\r\n", status);
 	if(rf_is_tx_ds_active_in_status_val(status)){
 		pkt_sent = true;
 	}
