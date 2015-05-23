@@ -18,12 +18,15 @@
 #define WAKEUP_TIME		(30*60)
 #define STATE_MAGIC		(0xAA12)
 
+
+uint16_t check_sendpkttime(void);
 void setup_hw(void);
-uint8_t init_state(uint8_t powerdown_reason);
-uint8_t is_wakeuptime(void);
+bool init_state(uint8_t powerdown_reason);
+bool is_sendpkttime(void);
 void powerdown(void);
 void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas);
-int send_pkt(struct status_packet *pkt);
+bool send_pkt(struct status_packet *pkt);
+bool is_p14_active(void);
 
 struct state_t{
 	uint16_t wakeups;
@@ -31,6 +34,7 @@ struct state_t{
 	uint16_t sent_pkts;
 	uint16_t no_answer;
 	uint16_t wakeups_before_run;
+	bool	saved_trap_active;
 };
 
 /* 
@@ -54,10 +58,14 @@ void main()
 	uint8_t vdc;
 	uint8_t pr = PWRDWN; //TODO: doesn't seem to exist getters for PWRDWN? add
 	uint8_t state_ok;
+	bool	trap_active;
 
 	state_ok = init_state(pr);
+	trap_active = is_p14_active();
 
-	if(!is_wakeuptime()){
+	if(!is_sendpkttime() &&
+	   trap_active == state.saved_trap_active &&
+	    state_ok){
 		powerdown();
 	}
 	
@@ -70,6 +78,7 @@ void main()
 	printf("\r\nRunning: " __FILE__ ", build:" __DATE__ "\r\n");
 	printf("reset reason: 0x%hhx\r\n", pwr_clk_mgmt_get_reset_reason());
 	printf("powerdown: 0x%hhx\r\n", pr);
+	printf("trap_active %d\r\n", trap_active);
 
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
 	RSTREAS = 0xFF;
@@ -82,7 +91,11 @@ void main()
 	
 	prepare_pkt(&packet, vdc);
 	if(!send_pkt(&packet)){
+		printf("WARNING: no answer when sending packet\r\n");
 		state.no_answer++;
+	}else{
+		//only save state if pkt was succesfully send
+		state.saved_trap_active = trap_active;
 	}
 	state.sent_pkts++;
 
@@ -119,7 +132,7 @@ void powerdown(void)
  * in the state is wrong
  * Returns 1 if state was ok, 0 if reset
  */
-uint8_t init_state(uint8_t powerdown)
+bool init_state(uint8_t powerdown)
 {
 	uint8_t prev_pd_reason = powerdown & PWRDWN_PWR_CNTL_MASK;
 	uint8_t wakeup_from_tick = powerdown & PWRDWN_PWR_IS_WAKE_FROM_TICK;
@@ -128,16 +141,17 @@ uint8_t init_state(uint8_t powerdown)
 	    wakeup_from_tick == PWRDWN_PWR_IS_WAKE_FROM_TICK &&
 	    state.magic == STATE_MAGIC){
 		state.wakeups++;
-		return 1;	
+		return true;	
 	}else{
 		memset(&state, 0x0, sizeof(state));
 		state.magic = STATE_MAGIC;
-		state.wakeups_before_run = check_wakeuptime();
-		return 0;
+		state.wakeups_before_run = check_sendpkttime();
+		state.saved_trap_active= false;
+		return false;
 	}
 }
 
-uint16_t check_wakeuptime(void)
+uint16_t check_sendpkttime(void)
 {
 	//setup P1.3 as input pin
 	gpio_pin_configure(GPIO_PIN_ID_P1_3,
@@ -152,18 +166,34 @@ uint16_t check_wakeuptime(void)
 	}
 }
 
-uint8_t is_wakeuptime(void)
+/*
+ * time to send pkt if enough wakeups
+ */
+bool is_sendpkttime(void)
 {
-	return (state.wakeups % state.wakeups_before_run)==0;
+	return (state.wakeups % state.wakeups_before_run) == 0;
 }
 
-void setup_hw()
+/*
+ * trap is connected to P1.4
+ */
+bool is_p14_active(void)
 {
-
 	//setup P1.4 as input pin
 	gpio_pin_configure(GPIO_PIN_ID_P1_4,
 				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
 				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_PULL_DOWN_RESISTOR);
+
+	return gpio_pin_val_read(GPIO_PIN_ID_P1_4);
+}
+
+/*
+ * Init devices and pins. Initialization of devices needed before
+ * it is known if this startup should send a packet, is done in
+ * method that needs it. This due to energy saving
+ */
+void setup_hw()
+{
         
 	//Setup UART pins
         gpio_pin_configure(GPIO_PIN_ID_FUNC_RXD,
@@ -196,15 +226,15 @@ void prepare_pkt(struct status_packet *pkt, uint8_t vdc_meas)
 	pkt->timeouts    = state.no_answer;
 	pkt->vdc         = vdc_meas;
 	pkt->version     = STATUS_PACKET_HDR_VER;
-	pkt->status[0]   = gpio_pin_val_read(GPIO_PIN_ID_P1_4);
+	pkt->status[0]   = is_p14_active();
         pkt->status[1]   = P0; //TODO: move out port reads
         pkt->status[2]   = P1;
         pkt->status[3]   = 0;
 }
 
-int send_pkt(struct status_packet *pkt)
+bool send_pkt(struct status_packet *pkt)
 {
-	uint8_t pkt_sent = 0;
+	bool pkt_sent = false;
 	uint8_t status;
 	
 	//TODO: calculate reasonable ARD
@@ -239,7 +269,7 @@ int send_pkt(struct status_packet *pkt)
 	status = rf_get_status();
 	printf("send_packet: irq active, status 0x%02X\r\n", status);
 	if(rf_is_tx_ds_active_in_status_val(status)){
-		pkt_sent = 1;
+		pkt_sent = true;
 	}
 	rf_irq_clear_all(); //clear all interrupts in the 24L01
 
