@@ -47,8 +47,11 @@ void main()
 				printf("   wakeups     0x%04X\r\n", packet.wakeups);
 				printf("   timeouts    0x%04X\r\n", packet.timeouts);
 				printf("   vdc         0x%02X\r\n", packet.vdc);
-				printf("   status      0x%08X\r\n", *((uint32_t*)&(packet.status)));
-				printf("   version     0x%02x\r\n", packet.version);
+				printf("   version     0x%02hhX\r\n", packet.version);
+				printf("   trap active 0x%02hhX\r\n", packet.status[0]);
+				printf("   P0          0x%02hhX\r\n", packet.status[1]);
+				printf("   P1          0x%02hhX\r\n", packet.status[2]);
+
 			}while((rf_get_status() & RF_STATUS_RX_P_NO_RX_FIFO_EMPTY) != RF_STATUS_RX_P_NO_RX_FIFO_EMPTY);
 			rf_irq_clear_all();		//TODO: possible race? level/edge?
 		}
