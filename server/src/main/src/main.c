@@ -48,10 +48,12 @@ void main()
 					printf("WARNING: peer timeout increased %d->%d\r\n",
 						saved_timeouts, packet.timeouts);
 				}
+				saved_timeouts = packet.timeouts;
 			}else{
 				printf("WARNING: corrupt packet received (magic 0x%08x)\r\n",
 						packet.magic);
 			}
+			printf("\r\n");
 		}
 
 		rpd += rf_is_rpd_active();
@@ -60,9 +62,10 @@ void main()
 			printf("Current local voltage: %dmV\r\n",
 				adc_convert_to_mv(adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD)));
 			printf("RF over -64dBm: %d times\r\n", rpd);
-
+			printf("\r\n");
 			rpd = 0;
 		}
+
 	}
 }
 
