@@ -25,8 +25,6 @@ void main()
 {
 	uint8_t rr = pwr_clk_mgmt_get_reset_reason();
 	uint16_t i;
-	uint8_t rf_status = 0;
-	uint8_t rf_fifo_status = 0;
 	uint16_t rpd = 0;
 
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
@@ -38,7 +36,6 @@ void main()
 	printf("reset reason: 0x%hhx\r\n", rr);
 
 	for(i=0; ; i++){
-		uint8_t  buffer;
 		uint16_t saved_timeouts = 0;
 
 		if(get_latest_pkt(&packet)){
@@ -57,20 +54,13 @@ void main()
 			}
 		}
 
-		rf_status |= rf_get_status();
-		rf_read_register(RF_FIFO_STATUS, &buffer, 1);
-		rf_fifo_status |= buffer;
 		rpd += rf_is_rpd_active();
 
 		if(i == 0){
-			printf("VDC measure: %d\r\n",
-				adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD));
-			printf("RF status: 0x%02X\r\n", rf_status);
-			printf("RF FIFO status: 0x%02X\r\n",rf_fifo_status);
-			printf("RF RPD: %d\r\n", rpd);
+			printf("Current local voltage: %dmV\r\n",
+				adc_convert_to_mv(adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD)));
+			printf("RF over -64dBm: %d times\r\n", rpd);
 
-			rf_status = 0;
-			rf_fifo_status = 0;
 			rpd = 0;
 		}
 	}
