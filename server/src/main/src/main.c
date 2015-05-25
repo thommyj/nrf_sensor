@@ -45,7 +45,7 @@ void main()
 					packet.status[0],
 					adc_convert_to_mv(packet.vdc));
 				if(saved_timeouts != packet.timeouts){
-					printf("WARNING: peer timeout increased %d->%d\r\n",
+					printf("WARNING: peer timeout pkts increased %d->%d\r\n",
 						saved_timeouts, packet.timeouts);
 				}
 				saved_timeouts = packet.timeouts;
@@ -59,9 +59,9 @@ void main()
 		rpd += rf_is_rpd_active();
 
 		if(i == 0){
-			printf("Current local voltage: %dmV\r\n",
+			printf("Local info:\r\n   Current VDC: %dmV\r\n",
 				adc_convert_to_mv(adc_start_single_conversion_get_value(ADC_CHANNEL_1_THIRD_VDD)));
-			printf("RF over -64dBm: %d times\r\n", rpd);
+			printf("   RF over -64dBm: %d times\r\n", rpd);
 			printf("\r\n");
 			rpd = 0;
 		}
