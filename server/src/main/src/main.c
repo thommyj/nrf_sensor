@@ -9,23 +9,36 @@
 #include <rtc2.h>
 #include <delay.h>
 #include <rf.h>
+#include <sspi.h>
 
 #include "reg24le1.h"
 #include "sensor.h"
 
 //#define DEBUG 
 
-struct status_packet packet;
+struct spi_packet
+{
+	uint16_t seq;
+	uint16_t lost;
+	uint8_t  trap;
+	uint8_t  vdc;
+};
+
+struct spi_packet tx_spipkt;
+struct status_packet rec_rfpkt;
 
 void setup_hw(void);
 bool get_latest_pkt(struct status_packet *pkt);
 uint16_t adc_convert_to_mv(uint8_t adc);
+void prepare_spipkt(struct spi_packet *spi, struct status_packet *rf);
+
 
 void main()
 {
 	uint8_t rr = pwr_clk_mgmt_get_reset_reason();
 	uint16_t i;
 	uint16_t rpd = 0;
+	uint8_t spi_cnt;
 
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
 	RSTREAS = 0xFF;
@@ -35,27 +48,46 @@ void main()
 	printf("\r\nRunning: " __FILE__ ", build:" __DATE__ "\r\n");
 	printf("reset reason: 0x%hhx\r\n", rr);
 
+	//initialize spi and rf to all '1's
+	memset(&tx_spipkt, 0xFF, sizeof(tx_spipkt));
+	sspi_send_data(0xFF);
+	spi_cnt = 1;
+	memset(&rec_rfpkt, 0xFF, sizeof(rec_rfpkt));
+
 	for(i=0; ; i++){
 		uint16_t saved_timeouts = 0;
 
-		if(get_latest_pkt(&packet)){
-			if(packet.magic == STATUS_PACKET_MAGIC){
-				printf("Status pkt %d received\r\n", packet.sequence_nr);
+		if(get_latest_pkt(&rec_rfpkt)){
+			if(rec_rfpkt.magic == STATUS_PACKET_MAGIC){
+				printf("Status pkt %d received\r\n", rec_rfpkt.sequence_nr);
 				printf("   trap %d, vdc %dmV\r\n",
-					packet.status[0],
-					adc_convert_to_mv(packet.vdc));
-				if(saved_timeouts != packet.timeouts){
+					rec_rfpkt.status[0],
+					adc_convert_to_mv(rec_rfpkt.vdc));
+				if(saved_timeouts != rec_rfpkt.timeouts){
 					printf("WARNING: peer timeout pkts increased %d->%d\r\n",
-						saved_timeouts, packet.timeouts);
+						saved_timeouts, rec_rfpkt.timeouts);
 				}
-				saved_timeouts = packet.timeouts;
+				saved_timeouts = rec_rfpkt.timeouts;
 			}else{
 				printf("WARNING: corrupt packet received (magic 0x%08x)\r\n",
-						packet.magic);
+						rec_rfpkt.magic);
 			}
 			printf("\r\n");
 
-			gpio_pin_val_write(GPIO_PIN_ID_P1_4, packet.status[0]);
+			gpio_pin_val_write(GPIO_PIN_ID_P1_4, rec_rfpkt.status[0]);
+		}
+
+		//all data sent, copy new data to spi buffer 
+		if(spi_cnt == sizeof(tx_spipkt)){
+			prepare_spipkt(&tx_spipkt, &rec_rfpkt);
+			spi_cnt = 0;
+		}
+
+		//if data has been sent on SPI, put in new data in FIFO
+		if(SPISSTAT & SPISSTAT_INT_SPI_SLAVE_DONE_FLAG){
+			uint8_t *p = (uint8_t*)&tx_spipkt; 
+			sspi_send_data(p[spi_cnt]);
+			spi_cnt++;
 		}
 
 		rpd += rf_is_rpd_active();
@@ -71,6 +103,13 @@ void main()
 	}
 }
 
+void prepare_spipkt(struct spi_packet *spi, struct status_packet *rf)
+{
+	spi->seq = rf->sequence_nr;
+	spi->lost = rf->timeouts;
+	spi->trap = (uint8_t)rf->status[0];
+	spi->vdc = rf->vdc;
+}
 
 /*
  * measurment is done by dividing vdc with 3, and using
@@ -118,13 +157,13 @@ void setup_hw()
 {
 	//setup P1.4 as output pin
 	gpio_pin_configure(GPIO_PIN_ID_P1_4,
-				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
 				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_NORMAL_DRIVE_STRENGTH);
 	gpio_pin_val_write(GPIO_PIN_ID_P1_4, false);
 
 	//Setup UART pins
         gpio_pin_configure(GPIO_PIN_ID_FUNC_RXD,
-                                           GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
+                                           GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
                                            GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_NO_RESISTORS);
 
         gpio_pin_configure(GPIO_PIN_ID_FUNC_TXD,
@@ -144,6 +183,27 @@ void setup_hw()
 			ADC_CONFIG_OPTION_ACQ_TIME_3_US |
 			ADC_CONFIG_OPTION_RESULT_JUSTIFICATION_RIGHT);
 
+	//setup spi, mode 0, msb and disable all interrupts
+	sspi_configure(SSPI_CONFIG_OPTION_CPHA_SAMPLE_ON_MSCK_EDGE_LEADING | 
+			SSPI_CONFIG_OPTION_CPOL_MSCK_ACTIVE_HIGH |
+			SSPI_CONFIG_OPTION_DATA_ORDER_MSB_FIRST |
+			SSPI_CONFIG_OPTION_SPI_SLAVE_DONE_INT_DISABLE |
+			SSPI_CONFIG_OPTION_CSN_LOW_INT_DISABLE |
+			SSPI_CONFIG_OPTION_CSN_HIGH_INT_DISABLE);
+  	gpio_pin_configure(GPIO_PIN_ID_FUNC_SSCK,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_NO_RESISTORS);
+  	gpio_pin_configure(GPIO_PIN_ID_FUNC_SMOSI,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_NO_RESISTORS);
+  	gpio_pin_configure(GPIO_PIN_ID_FUNC_SMISO,
+				GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_NORMAL_DRIVE_STRENGTH);
+  	gpio_pin_configure(GPIO_PIN_ID_FUNC_SCSN,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_PULL_UP_RESISTOR);
+	sspi_enable();	
+
 	//TODO: calculate reasonable ARD
 	//TODO: gain control?
 	rf_configure(RF_CONFIG_MASK_TX_DS |
@@ -161,7 +221,7 @@ void setup_hw()
 		RF_RF_SETUP_RF_DR_1_MBPS | RF_RF_SETUP_RF_PWR_0_DBM,
 		client0_address,
 		NULL, 0, 0, 0, 0,	/* not interested in other channel addresses*/
-		server_address,
+		NULL,
 		sizeof(struct status_packet),  /* size of expected packet */ 
 		0,0,0,0,0,		
 		RF_DYNPD_DPL_NONE,	/* no dynamic payload size */
