@@ -54,6 +54,8 @@ void main()
 						packet.magic);
 			}
 			printf("\r\n");
+
+			gpio_pin_val_write(GPIO_PIN_ID_P1_4, packet.status[0]);
 		}
 
 		rpd += rf_is_rpd_active();
@@ -114,9 +116,15 @@ bool get_latest_pkt(struct status_packet *pkt)
 
 void setup_hw()
 {
+	//setup P1.4 as output pin
+	gpio_pin_configure(GPIO_PIN_ID_P1_4,
+				GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_NORMAL_DRIVE_STRENGTH);
+	gpio_pin_val_write(GPIO_PIN_ID_P1_4, false);
+
 	//Setup UART pins
         gpio_pin_configure(GPIO_PIN_ID_FUNC_RXD,
-                                           GPIO_PIN_CONFIG_OPTION_DIR_INPUT |
+                                           GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
                                            GPIO_PIN_CONFIG_OPTION_PIN_MODE_INPUT_BUFFER_ON_NO_RESISTORS);
 
         gpio_pin_configure(GPIO_PIN_ID_FUNC_TXD,
