@@ -4,7 +4,6 @@
 #define STATUS_PACKET_MAGIC   (0xAE51)
 #define STATUS_PACKET_HDR_VER (0x1)
 
-const char server_address[5] = {0xE7, 0xE7, 0x18, 0x18, 0xE1};
 const char client0_address[5] = {0x18, 0x18, 0xE7, 0xE7, 0xE2};
 
 struct status_packet{

@@ -75,7 +75,7 @@ void main()
 		printf("\r\n\r\nWARNING: state reset. This is normal if this is powerup");
 	}
 
-	printf("\r\nRunning: " __FILE__ ", " __DATE__ "\r\n");
+	printf("\r\nBuild date: " __DATE__ "\r\n");
 	printf("reset: 0x%hhx, pd 0x%hhd\r\n", pwr_clk_mgmt_get_reset_reason(), pr);
 	printf("trap %d (%d)\r\n", trap_active, state.saved_trap_active);
 	printf("wakeups %d, pkts %d (%d)\r\n", state.wakeups, state.sent_pkts, state.no_answer);	
@@ -236,6 +236,7 @@ bool send_pkt(struct status_packet *pkt)
 {
 	bool pkt_sent = false;
 	uint8_t status;
+	uint16_t timeout;
 	
 	//TODO: calculate reasonable ARD
 	//TODO: gain control?
@@ -250,9 +251,9 @@ bool send_pkt(struct status_packet *pkt)
                 RF_SETUP_RETR_ARD_4000 | RF_SETUP_RETR_ARC_15,
                 RF_RF_CH_DEFAULT_VAL,   /* use default channel */
                 RF_RF_SETUP_RF_DR_1_MBPS | RF_RF_SETUP_RF_PWR_0_DBM,
-                server_address,
+                client0_address,	/* pipe 0 address */
                 NULL, 0, 0, 0, 0,       /* not interested in other channel addresses*/
-                client0_address,
+                client0_address,        /* tx address, only one address for one connection, so same as rx */
                 sizeof(struct status_packet),  /* size of expected packet */
                 0,0,0,0,0,
                 RF_DYNPD_DPL_NONE,      /* no dynamic payload size */
@@ -260,16 +261,35 @@ bool send_pkt(struct status_packet *pkt)
 
 	rf_write_tx_payload((const uint8_t*)pkt, sizeof(struct status_packet), true); //transmit received char over RF
 
-	//wait until the packet has been sent or the maximum number of retries has been reached
-	//TODO: timeout?
-	while(!rf_irq_pin_active()){
-		/*NOP*/
+	/*
+	 * Wait until the packet has been sent or the maximum number of retries has been reached
+	 * use polling of status to see when ACK has been received
+	 */
+	for(timeout = 0; ; timeout++){
+		status = rf_get_status();
+		if(rf_is_tx_ds_active_in_status_val(status)){
+			pkt_sent = true;
+			break;
+		}else if(rf_is_max_rt_active_in_status_val(status)){
+			pkt_sent = false;
+			printf("WARNING: max rt active 0x%02X, timeout %d\r\n", status, timeout);
+			break;
+	 	/* 
+		 * ARD 4000us, max 15 tries => 4000*14=56ms max time
+		 * So it should be safe to say that we shouldn't get stuck
+		 * in this loop for more than 56*2ms
+		 * rf_get_status seems to take ~38.5us, and each loop has
+		 * an additional 5us delay. => 112*1000/(38.5+5)~2574 spins
+ 		 */
+		}else if(timeout == 2600){
+			pkt_sent = false;
+			printf("WARNING: timeout reached, status 0x%02X\r\n", status);
+			break;
+		}
+
+		delay_us(5);
 	}
 
-	status = rf_get_status();
-	if(rf_is_tx_ds_active_in_status_val(status)){
-		pkt_sent = true;
-	}
 	rf_irq_clear_all(); //clear all interrupts in the 24L01
 
 	rf_power_down();
