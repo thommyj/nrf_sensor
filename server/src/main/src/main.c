@@ -39,7 +39,8 @@ void main()
 	uint16_t i;
 	uint16_t rpd = 0;
 	uint8_t spi_cnt;
-
+	uint16_t saved_timeouts = 0;
+	uint16_t saved_seqnr = 0;
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
 	RSTREAS = 0xFF;
 
@@ -55,15 +56,20 @@ void main()
 	memset(&rec_rfpkt, 0xFF, sizeof(rec_rfpkt));
 
 	for(i=0; ; i++){
-		uint16_t saved_timeouts = 0;
 
 		if(get_latest_pkt(&rec_rfpkt)){
 			if(rec_rfpkt.magic == STATUS_PACKET_MAGIC){
 				printf("Status pkt %d received\r\n", rec_rfpkt.sequence_nr);
+				if(++saved_seqnr != rec_rfpkt.sequence_nr){
+					printf("WARNING: expected seq nr %d\r\n", saved_seqnr);
+				}
+				saved_seqnr = rec_rfpkt.sequence_nr++;
+
 				printf("   trap %d, vdc %dmV\r\n",
 					rec_rfpkt.status[0],
 					adc_convert_to_mv(rec_rfpkt.vdc));
-				if(saved_timeouts != rec_rfpkt.timeouts){
+
+				if(saved_timeouts < rec_rfpkt.timeouts){
 					printf("WARNING: peer timeout pkts increased %d->%d\r\n",
 						saved_timeouts, rec_rfpkt.timeouts);
 				}
