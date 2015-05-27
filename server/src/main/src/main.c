@@ -40,7 +40,7 @@ void main()
 	uint16_t rpd = 0;
 	uint8_t spi_cnt;
 	uint16_t saved_timeouts = 0;
-	uint16_t saved_seqnr = 0;
+	uint16_t saved_seqnr = 0xffff;
 	//pwr_clk_mgmt_clear_reset_reasons(); TODO: this lib-call is broken, write is needed
 	RSTREAS = 0xFF;
 
@@ -164,7 +164,7 @@ void setup_hw()
 	//setup P1.4 as output pin
 	gpio_pin_configure(GPIO_PIN_ID_P1_4,
 				GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
-				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_NORMAL_DRIVE_STRENGTH);
+				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_HIGH_DRIVE_STRENGTH);
 	gpio_pin_val_write(GPIO_PIN_ID_P1_4, false);
 
 	//Setup UART pins
