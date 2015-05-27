@@ -80,7 +80,7 @@ void main()
 			}
 			printf("\r\n");
 
-			gpio_pin_val_write(GPIO_PIN_ID_P1_4, rec_rfpkt.status[0]);
+			gpio_pin_val_write(GPIO_PIN_ID_P1_4, !rec_rfpkt.status[0]);
 		}
 
 		//all data sent, copy new data to spi buffer 
@@ -165,7 +165,7 @@ void setup_hw()
 	gpio_pin_configure(GPIO_PIN_ID_P1_4,
 				GPIO_PIN_CONFIG_OPTION_DIR_OUTPUT |
 				GPIO_PIN_CONFIG_OPTION_PIN_MODE_OUTPUT_BUFFER_HIGH_DRIVE_STRENGTH);
-	gpio_pin_val_write(GPIO_PIN_ID_P1_4, false);
+	gpio_pin_val_write(GPIO_PIN_ID_P1_4, true);
 
 	//Setup UART pins
         gpio_pin_configure(GPIO_PIN_ID_FUNC_RXD,
